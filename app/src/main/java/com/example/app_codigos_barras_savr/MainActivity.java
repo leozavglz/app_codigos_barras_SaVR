@@ -7,11 +7,23 @@ import org.opencv.core.Mat;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
 
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
+import android.view.View;
+import android.widget.FrameLayout;
+import android.widget.ScrollView;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
+
+
 
 import java.util.Collections;
 import java.util.List;
@@ -34,6 +46,7 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
 
     private boolean isProcessingFrame = false;
     private long lastAnalysisTime = 0; // Almacena el tiempo del último análisis
+    private boolean scanSuccessful = false; // Bandera para controlar si el escaneo fue exitoso
 
     public MainActivity() {
         Log.i(TAG, "Instantiated new " + this.getClass());
@@ -44,7 +57,6 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
         Log.i(TAG, "called onCreate");
         super.onCreate(savedInstanceState);
 
-        // Inicializa OpenCV y muestra un mensaje si falla
         if (OpenCVLoader.initDebug()) {
             Log.i(TAG, "OpenCV loaded successfully");
         } else {
@@ -53,11 +65,10 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
             return;
         }
 
-        // Mantener la pantalla encendida mientras se usa la cámara
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
 
-        // Configura la vista de la cámara
+        // Configurar la vista de la cámara
         mOpenCvCameraView = findViewById(R.id.camera_view);
         mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
         mOpenCvCameraView.setCvCameraViewListener(this);
@@ -69,27 +80,23 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
     @Override
     public void onPause() {
         super.onPause();
-        // Deshabilitar la cámara cuando la actividad está en pausa
         if (mOpenCvCameraView != null) mOpenCvCameraView.disableView();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        // Habilitar la cámara cuando la actividad se reanuda
         if (mOpenCvCameraView != null) mOpenCvCameraView.enableView();
     }
 
     @Override
     protected List<? extends CameraBridgeViewBase> getCameraViewList() {
-        // Devuelve la lista de vistas de cámara (solo una en este caso)
         return Collections.singletonList(mOpenCvCameraView);
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        // Deshabilitar la cámara cuando la actividad se destruye
         if (mOpenCvCameraView != null) mOpenCvCameraView.disableView();
     }
 
@@ -102,8 +109,6 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
     public void onCameraViewStopped() {
         // Libera recursos si es necesario cuando la vista de la cámara se detiene
     }
-
-    private boolean scanSuccessful = false; // Bandera para controlar si el escaneo fue exitoso
 
     @Override
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
@@ -162,11 +167,10 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
                 if ("EAN_13".equals(type)) {
                     Log.d(TAG, "Código EAN_13 detectado correctamente: " + info);
 
-                    // Detener el escaneo y mostrar el popup en la UI
                     runOnUiThread(() -> {
                         scanSuccessful = true; // Cambia la bandera para detener el escaneo
-                        mostrarPopup("Producto escaneado correctamente: " + info);
-                        detenerEscaneo();
+                        mostrarPopup("Producto escaneado correctamente", info);
+                        detenerEscaneo(); // Detener la cámara cuando se muestra el popup
                     });
                     break; // Salir del bucle ya que no necesitamos procesar más
                 }
@@ -185,10 +189,75 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
         }
     }
 
-    // Método para mostrar un mensaje tipo popup (Toast) en la pantalla
-    private void mostrarPopup(String mensaje) {
-        Toast.makeText(this, mensaje, Toast.LENGTH_LONG).show();
+    // Método para mostrar un popup de confirmación del producto
+    private void mostrarPopup(String mensaje, String codigo) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(mensaje);
+
+        // Custom View for popup
+        ScrollView layout = (ScrollView) getLayoutInflater().inflate(R.layout.popup_layout, null);
+        ImageView productImage = layout.findViewById(R.id.product_image);
+        TextView productName = layout.findViewById(R.id.product_name);
+        productName.setText(codigo); // Aquí asignamos el código del producto
+
+        // Spinner setup
+        Spinner spinnerQuantity = layout.findViewById(R.id.product_quantity_spinner);
+
+        // Array with quantities
+        Integer[] quantities = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+
+        // Create an ArrayAdapter using the string array and a default spinner layout
+        ArrayAdapter<Integer> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, quantities);
+        // Specify the layout to use when the list of choices appears
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        // Apply the adapter to the spinner
+        spinnerQuantity.setAdapter(adapter);
+
+        builder.setView(layout);
+
+        AlertDialog dialog = builder.create();
+
+        // Mostrar el fondo semitransparente
+        FrameLayout blurBackground = findViewById(R.id.blur_background);
+        blurBackground.setVisibility(View.VISIBLE);  // Mostrar el fondo oscuro semitransparente
+
+        // Botón para volver a escanear
+        Button btnRescan = layout.findViewById(R.id.btn_rescan);
+        btnRescan.setOnClickListener(v -> {
+            scanSuccessful = false; // Resetear la bandera de escaneo exitoso
+            dialog.dismiss(); // Cerrar el popup
+            Toast.makeText(this, "Escaneo reiniciado", Toast.LENGTH_SHORT).show();
+
+            // Ocultar el fondo oscuro
+            blurBackground.setVisibility(View.GONE);
+
+            if (mOpenCvCameraView != null) {
+                mOpenCvCameraView.enableView(); // Reanudar la cámara para un nuevo escaneo
+            }
+        });
+
+        // Botón para confirmar producto
+        Button btnConfirm = layout.findViewById(R.id.btn_confirm);
+        btnConfirm.setOnClickListener(v -> {
+            scanSuccessful = false; // Resetear la bandera de escaneo exitoso
+            dialog.dismiss(); // Cerrar el popup
+            Toast.makeText(this, "Producto confirmado", Toast.LENGTH_SHORT).show();
+
+            // Ocultar el fondo oscuro
+            blurBackground.setVisibility(View.GONE);
+
+            if (mOpenCvCameraView != null) {
+                mOpenCvCameraView.enableView(); // Reanudar la cámara para un nuevo escaneo
+            }
+        });
+
+        // Mostrar el popup
+        dialog.show();
+
+        // Configurar la acción para cuando el popup se cierre (si el usuario lo cierra tocando fuera del diálogo)
+        dialog.setOnDismissListener(dialogInterface -> blurBackground.setVisibility(View.GONE));
     }
+
 
     // Método para dibujar los contornos de los códigos de barras en la imagen
     private void drawBarcodeContours(Mat points, Mat imgRgba) {
@@ -197,11 +266,9 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
             return;
         }
 
-        // Convertimos 'points' a un MatOfPoint2f para manejar los puntos
         MatOfPoint2f matOfPoint2f = new MatOfPoint2f(points);
         Point[] pointArray = matOfPoint2f.toArray();
 
-        // Cada código de barras debería tener 4 puntos para definir el área
         int totalPoints = pointArray.length;
         if (totalPoints % 4 != 0) {
             Log.e(TAG, "Número inesperado de puntos: " + totalPoints);
@@ -210,7 +277,6 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
 
         List<MatOfPoint> contours = new ArrayList<>();
 
-        // Agrupamos cada 4 puntos para formar los contornos de los códigos de barras
         for (int i = 0; i < totalPoints; i += 4) {
             Point[] quadPoints = new Point[4];
             System.arraycopy(pointArray, i, quadPoints, 0, 4);
@@ -219,7 +285,6 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
             contours.add(contour);
         }
 
-        // Dibuja los contornos en la imagen imgRgba con un color verde
         if (!contours.isEmpty()) {
             Imgproc.polylines(imgRgba, contours, true, new Scalar(0, 255, 0), 4);
         }
