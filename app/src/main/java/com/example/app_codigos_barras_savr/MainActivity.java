@@ -27,8 +27,10 @@ package com.example.app_codigos_barras_savr;
 
 import org.opencv.android.CameraActivity;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
+import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Mat;
 import org.opencv.android.CameraBridgeViewBase;
+import org.opencv.core.MatOfPoint2f;
 
 import android.os.Bundle;
 import android.util.Log;
@@ -59,7 +61,12 @@ public class MainActivity extends CameraActivity implements CameraBridgeViewBase
         Log.i(TAG, "called onCreate");
         super.onCreate(savedInstanceState);
 
-
+        if (OpenCVLoader.initDebug()) {
+            Log.i(TAG, "OpenCV loaded successfully");
+        } else {
+            Log.e(TAG, "OpenCV initialization failed!");
+            return;
+        }
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
